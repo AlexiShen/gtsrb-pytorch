@@ -10,8 +10,12 @@ import torch.nn.functional as F
 import torchvision.datasets as datasets
 import numpy as np
 from data import initialize_data # data.py in the same folder
+from data import data_transforms
 from model import Net
 import torchvision
+import random
+import pandas as pd
+
 
 
 parser = argparse.ArgumentParser(description='PyTorch GTSRB evaluation script')
@@ -24,15 +28,18 @@ parser.add_argument('--outfile', type=str, default='pred.csv', metavar='D',
 
 args = parser.parse_args()
 
-state_dict = torch.load(args.model)
+state_dict = torch.load(args.model, weights_only=True)
 model = Net()
 model.load_state_dict(state_dict)
 model.eval()
 
 from data import data_jitter_hue,data_jitter_brightness,data_jitter_saturation,data_jitter_contrast,data_rotate,data_hvflip,data_shear,data_translate,data_center,data_grayscale
 
+ground_truth_dir = args.data + '/Test.csv'
+ground_truth = pd.read_csv(ground_truth_dir)
+ground_truth_dict = dict(zip(ground_truth['Path'], ground_truth['ClassId']))
 
-test_dir = args.data + '/test_images'
+test_dir = args.data + '/Test'
 
 def pil_loader(path):
     # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
@@ -44,8 +51,22 @@ transforms = [data_transforms,data_jitter_hue,data_jitter_brightness,data_jitter
 output_file = open(args.outfile, "w")
 output_file.write("Filename,ClassId\n")
 
-for f in tqdm(os.listdir(test_dir)):
-    if 'ppm' in f:
+# print("Test directory:", test_dir)
+# print("Files in test directory:", os.listdir(test_dir))
+# for f in tqdm(os.listdir(test_dir)):
+all_test_files = [f for f in os.listdir(test_dir) if 'png' in f]  # Filter only PNG files
+
+# Select 10% of test files
+subset_size = int(0.1 * len(all_test_files))
+test_subset = random.sample(all_test_files, subset_size)
+
+correct_predictions = 0
+total_predictions = 0
+
+
+# Loop through the 10% subset
+for f in tqdm(test_subset):
+    if 'png' in f:
         output = torch.zeros([1, 43], dtype=torch.float32)
         with torch.no_grad():
             for i in range(0,len(transforms)):
@@ -53,11 +74,29 @@ for f in tqdm(os.listdir(test_dir)):
                 data = data.view(1, data.size(0), data.size(1), data.size(2))
                 data = Variable(data)
                 output = output.add(model(data))
-            pred = output.data.max(1, keepdim=True)[1]
-            file_id = f[0:5]
-            output_file.write("%s,%d\n" % (file_id, pred))
 
-            
+            # pred = output.data.max(1, keepdim=True)[1]
+            # file_id = f[0:5]
+            # output_file.write("%s,%d\n" % (file_id, pred))
+            # Get the predicted class
+            pred = output.data.max(1, keepdim=True)[1].item()
+
+            # Extract the ground truth ClassId using the file name
+            file_path = 'Test/' + f
+            true_class_id = ground_truth_dict[file_path]
+
+            # Compare prediction with ground truth
+            if pred == true_class_id:
+                correct_predictions += 1
+
+            total_predictions += 1
+
+            # Optionally write predictions to the output file
+            output_file.write("%s,%d,%d\n" % (f[:5], pred, true_class_id))
+
+# Calculate accuracy
+accuracy = correct_predictions / total_predictions
+print(f"Accuracy: {accuracy * 100:.2f}%")
 
 output_file.close()
 

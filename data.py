@@ -16,7 +16,7 @@ data_transforms = transforms.Compose([
 # Resize, normalize and jitter image brightness
 data_jitter_brightness = transforms.Compose([
 	transforms.Resize((32, 32)),
-    transforms.ColorJitter(brightness=-5),
+    transforms.ColorJitter(brightness=0.5),
     transforms.ColorJitter(brightness=5),
     transforms.ToTensor(),
     transforms.Normalize((0.3337, 0.3064, 0.3171), ( 0.2672, 0.2564, 0.2629))
@@ -26,7 +26,7 @@ data_jitter_brightness = transforms.Compose([
 data_jitter_saturation = transforms.Compose([
 	transforms.Resize((32, 32)),
     transforms.ColorJitter(saturation=5),
-    transforms.ColorJitter(saturation=-5),
+    transforms.ColorJitter(saturation=0.5),
     transforms.ToTensor(),
     transforms.Normalize((0.3337, 0.3064, 0.3171), ( 0.2672, 0.2564, 0.2629))
 ])
@@ -35,7 +35,7 @@ data_jitter_saturation = transforms.Compose([
 data_jitter_contrast = transforms.Compose([
 	transforms.Resize((32, 32)),
     transforms.ColorJitter(contrast=5),
-    transforms.ColorJitter(contrast=-5),
+    transforms.ColorJitter(contrast=0.5),
     transforms.ToTensor(),
     transforms.Normalize((0.3337, 0.3064, 0.3171), ( 0.2672, 0.2564, 0.2629))
 ])
@@ -115,37 +115,15 @@ data_grayscale = transforms.Compose([
 
 
 def initialize_data(folder):
-    train_zip = folder + '/train_images.zip'
-    test_zip = folder + '/test_images.zip'
-    if not os.path.exists(train_zip) or not os.path.exists(test_zip):
-        raise(RuntimeError("Could not find " + train_zip + " and " + test_zip
-              + ', please download them from https://www.kaggle.com/c/nyu-cv-fall-2017/data '))
-              
-    # extract train_data.zip to train_data
-    train_folder = folder + '/train_images'
+    #Set paths for training and testing folders
+    train_folder = folder + '/Train'
+    test_folder = folder + '/Test'
+
+    # Verify if the train and test folders exist
     if not os.path.isdir(train_folder):
-        print(train_folder + ' not found, extracting ' + train_zip)
-        zip_ref = zipfile.ZipFile(train_zip, 'r')
-        zip_ref.extractall(folder)
-        zip_ref.close()
-        
-    # extract test_data.zip to test_data
-    test_folder = folder + '/test_images'
+        raise RuntimeError(f"Train folder not found at {train_folder}. Please check the dataset structure.")
     if not os.path.isdir(test_folder):
-        print(test_folder + ' not found, extracting ' + test_zip)
-        zip_ref = zipfile.ZipFile(test_zip, 'r')
-        zip_ref.extractall(folder)
-        zip_ref.close()
-        
-    # make validation_data by using images 00000*, 00001* and 00002* in each class
-    val_folder = folder + '/val_images'
-    if not os.path.isdir(val_folder):
-        print(val_folder + ' not found, making a validation set')
-        os.mkdir(val_folder)
-        for dirs in os.listdir(train_folder):
-            if dirs.startswith('000'):
-                os.mkdir(val_folder + '/' + dirs)
-                for f in os.listdir(train_folder + '/' + dirs):
-                    if f.startswith('00000') or f.startswith('00001') or f.startswith('00002'):
-                        # move file to validation folder
-                        os.rename(train_folder + '/' + dirs + '/' + f, val_folder + '/' + dirs + '/' + f)
+        raise RuntimeError(f"Test folder not found at {test_folder}. Please check the dataset structure.")
+
+    # Return paths for training and testing
+    return train_folder, test_folder

@@ -4,9 +4,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.utils.data import Subset
 from torchvision import datasets, transforms
 from torch.autograd import Variable
 import numpy as np
+import random
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch GTSRB example')
@@ -43,24 +45,58 @@ from data import initialize_data, data_transforms,data_jitter_hue,data_jitter_br
 initialize_data(args.data) # extracts the zip files, makes a validation set
    
 # Apply data transformations on the training images to augment dataset
-train_loader = torch.utils.data.DataLoader(
-   torch.utils.data.ConcatDataset([datasets.ImageFolder(args.data + '/train_images',
-   transform=data_transforms),
-   datasets.ImageFolder(args.data + '/train_images',
-   transform=data_jitter_brightness),datasets.ImageFolder(args.data + '/train_images',
-   transform=data_jitter_hue),datasets.ImageFolder(args.data + '/train_images',
-   transform=data_jitter_contrast),datasets.ImageFolder(args.data + '/train_images',
-   transform=data_jitter_saturation),datasets.ImageFolder(args.data + '/train_images',
-   transform=data_translate),datasets.ImageFolder(args.data + '/train_images',
-   transform=data_rotate),datasets.ImageFolder(args.data + '/train_images',
-   transform=data_hvflip),datasets.ImageFolder(args.data + '/train_images',
-   transform=data_center),datasets.ImageFolder(args.data + '/train_images',
-   transform=data_shear)]), batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=use_gpu)
+# train_loader = torch.utils.data.DataLoader(
+#    torch.utils.data.ConcatDataset([datasets.ImageFolder(args.data + '/Train',
+#    transform=data_transforms),
+#    datasets.ImageFolder(args.data + '/Train',
+#    transform=data_jitter_brightness),datasets.ImageFolder(args.data + '/Train',
+#    transform=data_jitter_hue),datasets.ImageFolder(args.data + '/Train',
+#    transform=data_jitter_contrast),datasets.ImageFolder(args.data + '/Train',
+#    transform=data_jitter_saturation),datasets.ImageFolder(args.data + '/Train',
+#    transform=data_translate),datasets.ImageFolder(args.data + '/Train',
+#    transform=data_rotate),datasets.ImageFolder(args.data + '/Train',
+#    transform=data_hvflip),datasets.ImageFolder(args.data + '/Train',
+#    transform=data_center),datasets.ImageFolder(args.data + '/Train',
+#    transform=data_shear)]), batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=use_gpu)
    
-val_loader = torch.utils.data.DataLoader(
-    datasets.ImageFolder(args.data + '/val_images',
-                         transform=data_transforms),
-    batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=use_gpu)
+# Combine datasets with different augmentations
+combined_train_dataset = torch.utils.data.ConcatDataset([
+    datasets.ImageFolder(args.data + '/Train', transform=data_transforms),
+    datasets.ImageFolder(args.data + '/Train', transform=data_jitter_brightness),
+    datasets.ImageFolder(args.data + '/Train', transform=data_jitter_hue),
+    datasets.ImageFolder(args.data + '/Train', transform=data_jitter_contrast),
+    datasets.ImageFolder(args.data + '/Train', transform=data_jitter_saturation),
+    datasets.ImageFolder(args.data + '/Train', transform=data_translate),
+    datasets.ImageFolder(args.data + '/Train', transform=data_rotate),
+    datasets.ImageFolder(args.data + '/Train', transform=data_hvflip),
+    datasets.ImageFolder(args.data + '/Train', transform=data_center),
+    datasets.ImageFolder(args.data + '/Train', transform=data_shear),
+])
+
+# Compute the subset size (10% of the combined dataset)
+subset_size = int(0.1 * len(combined_train_dataset))
+indices = list(range(len(combined_train_dataset)))
+random.shuffle(indices)
+subset_indices = indices[:subset_size]
+
+# Create a subset dataset
+train_subset = Subset(combined_train_dataset, subset_indices)
+
+# DataLoader for the subset
+train_loader = torch.utils.data.DataLoader(
+    train_subset,
+    batch_size=args.batch_size,
+    shuffle=True,
+    num_workers=4,
+    pin_memory=use_gpu
+)
+
+print(f"Training with {subset_size} samples (10% of the augmented dataset).")
+
+# val_loader = torch.utils.data.DataLoader(
+#     datasets.ImageFolder(args.data + '/val_images',
+#                          transform=data_transforms),
+#     batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=use_gpu)
    
 
 # Neural Network and Optimizer
@@ -98,31 +134,31 @@ def train(epoch):
                 training_loss / len(train_loader.dataset), correct, len(train_loader.dataset),
                 100. * correct / len(train_loader.dataset)))
 
-def validation():
-    model.eval()
-    validation_loss = 0
-    correct = 0
-    for data, target in val_loader:
-        with torch.no_grad():
-            data, target = Variable(data), Variable(target)
-            if use_gpu:
-                data = data.cuda()
-                target = target.cuda()
-            output = model(data)
-            validation_loss += F.nll_loss(output, target, size_average=False).data.item() # sum up batch loss
-            pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
-            correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+# def validation():
+#     model.eval()
+#     validation_loss = 0
+#     correct = 0
+#     for data, target in val_loader:
+#         with torch.no_grad():
+#             data, target = Variable(data), Variable(target)
+#             if use_gpu:
+#                 data = data.cuda()
+#                 target = target.cuda()
+#             output = model(data)
+#             validation_loss += F.nll_loss(output, target, size_average=False).data.item() # sum up batch loss
+#             pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
+#             correct += pred.eq(target.data.view_as(pred)).cpu().sum()
 
-    validation_loss /= len(val_loader.dataset)
-    scheduler.step(np.around(validation_loss,2))
-    print('\nValidation set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-        validation_loss, correct, len(val_loader.dataset),
-        100. * correct / len(val_loader.dataset)))
+#     validation_loss /= len(val_loader.dataset)
+#     scheduler.step(np.around(validation_loss,2))
+#     print('\nValidation set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+#         validation_loss, correct, len(val_loader.dataset),
+#         100. * correct / len(val_loader.dataset)))
 
 
 for epoch in range(1, args.epochs + 1):
     train(epoch)
-    validation()
-    model_file = 'model_' + str(epoch) + '.pth'
+    # validation()
+    model_file = 'selfTrained_model_' + str(epoch) + '.pth'
     torch.save(model.state_dict(), model_file)
     print('\nSaved model to ' + model_file + '. Run `python evaluate.py ' + model_file + '` to generate the Kaggle formatted csv file')
